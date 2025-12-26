@@ -1,0 +1,20 @@
+[
+    {
+        "rule_id": "TIER_AWARE_CASHBACK",
+        "name": "Tier-Aware Weekly Cashback",
+        "description": "10% base cashback multiplied by tier benefit",
+        "priority": 30,
+        "is_active": true,
+        "conditions": {
+            "segment": "LOSING",
+            "net_loss_min": 100
+        },
+        "reward_config": {
+            "type": "BONUS_BALANCE",
+            "formula": "net_loss * 0.10 * cashback_multiplier",
+            "max_amount": 5000,
+            "wagering_requirement": 5,
+            "expiry_hours": 168
+        }
+    }
+]

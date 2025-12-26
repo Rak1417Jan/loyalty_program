@@ -15,9 +15,11 @@ from analytics.player_analytics import PlayerAnalytics
 from analytics.segmentation import PlayerSegmentation
 from engine.rules_engine import RulesEngine
 from wallet.wallet_manager import WalletManager
+from analytics.action_service import ActionService
 from safety.profit_safety import ProfitSafety
 from safety.fraud_detector import FraudDetector
 from data.excel_importer import ExcelImporter
+from models import RedemptionRule, LoyaltyRedemption
 from typing import List, Optional
 from datetime import datetime, timedelta
 import logging
@@ -161,6 +163,27 @@ def create_rule(rule: RewardRuleCreate, db: Session = Depends(get_db)):
     
     logger.info(f"Created reward rule: {rule.rule_id}")
     
+    # If rule is active, evaluate it for all existing players
+    if new_rule.is_active:
+        try:
+            from engine.rules_engine import RulesEngine
+            rules_engine = RulesEngine(db)
+            
+            logger.info(f"Evaluating new active rule {rule.rule_id} for all players")
+            evaluation_result = rules_engine.evaluate_rule_for_all_players(rule.rule_id)
+            
+            logger.info(
+                f"Rule evaluation complete: {evaluation_result['players_evaluated']} players evaluated, "
+                f"{evaluation_result['rewards_created']} rewards created"
+            )
+            
+            # Add evaluation result to response metadata (if needed)
+            # For now, just log it
+            
+        except Exception as e:
+            logger.error(f"Error evaluating rule for all players: {e}")
+            # Don't fail the rule creation, just log the error
+    
     return new_rule
 
 
@@ -175,13 +198,50 @@ def update_rule(
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
     
+    # Track if is_active is changing
+    was_active = rule.is_active
+    is_becoming_active = False
+    is_becoming_inactive = False
+    
     for field, value in rule_update.dict(exclude_unset=True).items():
+        if field == "is_active" and value != was_active:
+            if value:
+                is_becoming_active = True
+            else:
+                is_becoming_inactive = True
         setattr(rule, field, value)
     
     db.commit()
     db.refresh(rule)
     
     logger.info(f"Updated reward rule: {rule_id}")
+    
+    # Handle activation/deactivation
+    from engine.rules_engine import RulesEngine
+    rules_engine = RulesEngine(db)
+    
+    if is_becoming_active:
+        # Rule was just activated - evaluate for all players
+        try:
+            logger.info(f"Rule {rule_id} activated - evaluating for all players")
+            evaluation_result = rules_engine.evaluate_rule_for_all_players(rule_id)
+            logger.info(
+                f"Rule activation complete: {evaluation_result['players_evaluated']} players evaluated, "
+                f"{evaluation_result['rewards_created']} rewards created and issued"
+            )
+        except Exception as e:
+            logger.error(f"Error evaluating rule after activation: {e}")
+    
+    elif is_becoming_inactive:
+        # Rule was just deactivated - revoke all rewards
+        try:
+            logger.info(f"Rule {rule_id} deactivated - revoking rewards")
+            revocation_result = rules_engine.revoke_rewards_for_rule(rule_id)
+            logger.info(
+                f"Rule deactivation complete: {revocation_result['rewards_revoked']} rewards revoked"
+            )
+        except Exception as e:
+            logger.error(f"Error revoking rewards after deactivation: {e}")
     
     return rule
 
@@ -438,3 +498,83 @@ def add_bonus(request: AddBonusRequest, db: Session = Depends(get_db)):
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==================== Player Actions ====================
+
+@router.post("/actions/kyc", response_model=PlayerActionResponse)
+def complete_kyc(request: KYCActionRequest, db: Session = Depends(get_db)):
+    """Log KYC completion and trigger rewards"""
+    service = ActionService(db)
+    try:
+        result = service.complete_kyc(request.player_id)
+        return {
+            "success": True,
+            "action_id": result["action_id"],
+            "rewards_triggered": result["rewards_triggered"],
+            "message": "KYC completion logged"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/actions/profile-depth", response_model=PlayerActionResponse)
+def update_profile_depth(request: ProfileDepthRequest, db: Session = Depends(get_db)):
+    """Log profile completion depth and trigger rewards"""
+    service = ActionService(db)
+    try:
+        result = service.update_profile_depth(request.player_id, request.depth_percentage)
+        return {
+            "success": True,
+            "action_id": result["action_id"],
+            "rewards_triggered": result["rewards_triggered"],
+            "message": f"Profile depth {request.depth_percentage}% logged"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==================== Redemption Management ====================
+
+@router.get("/redemption/rules", response_model=List[RedemptionRuleResponse])
+def list_redemption_rules(db: Session = Depends(get_db)):
+    """List all redemption rules"""
+    return db.query(RedemptionRule).all()
+
+@router.post("/redemption/rules", response_model=RedemptionRuleResponse)
+def create_redemption_rule(rule: RedemptionRuleCreate, db: Session = Depends(get_db)):
+    """Create a new redemption rule"""
+    new_rule = RedemptionRule(**rule.dict())
+    db.add(new_rule)
+    db.commit()
+    db.refresh(new_rule)
+    return new_rule
+
+@router.post("/redemption/redeem", response_model=RedemptionResponse)
+def redeem_points(request: RedemptionRequest, db: Session = Depends(get_db)):
+    """Execute a point redemption"""
+    wallet = WalletManager(db)
+    try:
+        redemption = wallet.redeem_points(request.player_id, request.rule_id)
+        balance = wallet.get_or_create_balance(request.player_id)
+        return {
+            "success": True,
+            "redemption_id": redemption.id,
+            "lp_deducted": redemption.lp_amount,
+            "value_received": redemption.value_received,
+            "new_lp_balance": balance.lp_balance,
+            "message": "Redemption successful"
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Maintenance / Cron ====================
+
+@router.post("/cron/expire-points")
+def expire_points(db: Session = Depends(get_db)):
+    """Manually trigger loyalty point expiry processing"""
+    wallet = WalletManager(db)
+    expired_count = wallet.process_point_expiry()
+    return {"message": f"Expired {expired_count} point entries"}

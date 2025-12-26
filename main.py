@@ -4,6 +4,7 @@ Entry point for the Loyalty & Reward Program API
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from api.admin_api import router as admin_router
 from database import init_db
 from config import settings
@@ -17,11 +18,29 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database on startup"""
+    logger.info("Starting Loyalty & Reward Program API")
+    logger.info(f"Version: {settings.app_version}")
+    
+    # Initialize database
+    try:
+        init_db()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing database: {e}")
+    yield
+
+
 # Create FastAPI app
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="Scalable, Customizable, Profit-Safe Loyalty & Reward Program for Gaming Platforms"
+    description="Scalable, Customizable, Profit-Safe Loyalty & Reward Program for Gaming Platforms",
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -36,29 +55,15 @@ app.add_middleware(
 # Include routers
 app.include_router(admin_router, prefix="/api", tags=["Admin"])
 
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on startup"""
-    logger.info("Starting Loyalty & Reward Program API")
-    logger.info(f"Version: {settings.app_version}")
-    
-    # Initialize database
-    try:
-        init_db()
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(f"Error initializing database: {e}")
+# Serve Static Files
+app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
 
 @app.get("/")
 def root():
-    """Root endpoint"""
-    return {
-        "name": settings.app_name,
-        "version": settings.app_version,
-        "status": "running"
-    }
+    """Root endpoint - Redirect to frontend"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/frontend/index.html")
 
 
 @app.get("/health")

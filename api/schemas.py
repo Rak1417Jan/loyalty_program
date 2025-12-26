@@ -115,6 +115,7 @@ class TierBase(BaseModel):
     lp_min: int
     lp_max: Optional[int] = None
     benefits: Dict[str, Any] = {}
+    requirements: Dict[str, Any] = {}
 
 
 class TierCreate(TierBase):
@@ -125,6 +126,7 @@ class TierUpdate(BaseModel):
     lp_min: Optional[int] = None
     lp_max: Optional[int] = None
     benefits: Optional[Dict[str, Any]] = None
+    requirements: Optional[Dict[str, Any]] = None
 
 
 class TierResponse(TierBase):
@@ -149,7 +151,7 @@ class RewardHistoryResponse(BaseModel):
     issued_at: datetime
     expires_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    metadata: Dict[str, Any]
+    meta_data: Dict[str, Any]  # Changed from 'metadata' to 'meta_data' to match model
     
     class Config:
         from_attributes = True
@@ -253,4 +255,68 @@ class WalletOperationResponse(BaseModel):
     success: bool
     transaction_id: int
     new_balance: float
+    message: str
+
+
+# Redemption Rule Schemas
+class RedemptionRuleBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+    lp_cost: int
+    currency_value: float
+    currency_type: CurrencyType = CurrencyType.CASH
+    target_balance: str = "CASH"
+    min_lp_balance: int = 0
+    max_redemptions_per_month: Optional[int] = None
+    tier_requirement: Optional[TierLevel] = None
+
+class RedemptionRuleCreate(RedemptionRuleBase):
+    pass
+
+class RedemptionRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+    lp_cost: Optional[int] = None
+    currency_value: Optional[float] = None
+    currency_type: Optional[CurrencyType] = None
+    target_balance: Optional[str] = None
+    min_lp_balance: Optional[int] = None
+    max_redemptions_per_month: Optional[int] = None
+    tier_requirement: Optional[TierLevel] = None
+
+class RedemptionRuleResponse(RedemptionRuleBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+# Redemption Request/Response
+class RedemptionRequest(BaseModel):
+    player_id: str
+    rule_id: int
+
+class RedemptionResponse(BaseModel):
+    success: bool
+    redemption_id: int
+    lp_deducted: int
+    value_received: float
+    new_lp_balance: float
+    message: str
+
+# Player Action Schemas
+class KYCActionRequest(BaseModel):
+    player_id: str
+
+class ProfileDepthRequest(BaseModel):
+    player_id: str
+    depth_percentage: int
+
+class PlayerActionResponse(BaseModel):
+    success: bool
+    action_id: int
+    rewards_triggered: int
     message: str

@@ -28,6 +28,7 @@ class TierLevel(str, enum.Enum):
     SILVER = "SILVER"
     GOLD = "GOLD"
     PLATINUM = "PLATINUM"
+    DIAMOND = "DIAMOND"
 
 
 class CurrencyType(str, enum.Enum):
@@ -36,6 +37,7 @@ class CurrencyType(str, enum.Enum):
     REWARD_POINTS = "RP"   # Reward Points
     BONUS_BALANCE = "BONUS"  # Play-only money
     TICKETS = "TICKETS"    # Event/contest entry
+    CASH = "CASH"          # Real money
 
 
 class RewardType(str, enum.Enum):
@@ -60,6 +62,10 @@ class TransactionType(str, enum.Enum):
     BONUS_EXPIRED = "BONUS_EXPIRED"
     LP_EARNED = "LP_EARNED"
     LP_REDEEMED = "LP_REDEEMED"
+    LP_EXPIRED = "LP_EXPIRED"
+    KYC_COMPLETED = "KYC_COMPLETED"
+    PROFILE_COMPLETED = "PROFILE_COMPLETED"
+    ACTION = "ACTION"
 
 
 class RewardStatus(str, enum.Enum):
@@ -100,6 +106,9 @@ class Player(Base):
     transactions = relationship("Transaction", back_populates="player")
     rewards = relationship("RewardHistory", back_populates="player")
     abuse_signals = relationship("AbuseSignal", back_populates="player")
+    actions = relationship("PlayerAction", back_populates="player")
+    point_entries = relationship("LoyaltyPointEntry", back_populates="player")
+    redemptions = relationship("LoyaltyRedemption", back_populates="player")
     
     __table_args__ = (
         Index('idx_player_segment_tier', 'segment', 'tier'),
@@ -188,6 +197,10 @@ class Tier(Base):
     # Benefits (JSON)
     benefits = Column(JSON, default=dict)
     # Example: {"cashback_multiplier": 1.5, "free_plays_per_month": 10}
+    
+    # Requirements (JSON)
+    requirements = Column(JSON, default=dict)
+    # Example: {"lp_min": 1000, "kyc_required": true, "min_active_days_monthly": 5}
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -316,3 +329,84 @@ class AbuseSignal(Base):
     __table_args__ = (
         Index('idx_abuse_player_unresolved', 'player_id', 'is_resolved'),
     )
+
+
+class PlayerAction(Base):
+    """Log of specific player actions (KYC, Profile depth, etc.)"""
+    __tablename__ = "player_actions"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    player_id = Column(String(50), ForeignKey("players.player_id"), index=True)
+    action_type = Column(String(100), nullable=False, index=True)  # "KYC_COMPLETE", "PROFILE_DEEPENING"
+    value = Column(String(255), nullable=True)  # Optional value or detail
+    meta_data = Column(JSON, default=dict)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    player = relationship("Player", back_populates="actions")
+
+
+class RedemptionRule(Base):
+    """Configuration for loyalty point redemptions"""
+    __tablename__ = "redemption_rules"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)
+    description = Column(String(500), nullable=True)
+    is_active = Column(Boolean, default=True)
+    
+    # Conversion parameters
+    lp_cost = Column(Integer, nullable=False)  # Points required
+    currency_value = Column(Float, nullable=False)  # Value in real currency
+    currency_type = Column(Enum(CurrencyType), default=CurrencyType.CASH)
+    
+    # Redirection/Destination
+    target_balance = Column(String(50), default="CASH")  # "CASH", "BONUS"
+    
+    # Constraints
+    min_lp_balance = Column(Integer, default=0)
+    max_redemptions_per_month = Column(Integer, nullable=True)
+    tier_requirement = Column(Enum(TierLevel), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class LoyaltyPointEntry(Base):
+    """Individual point entries for FIFO expiry tracking"""
+    __tablename__ = "loyalty_point_entries"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    player_id = Column(String(50), ForeignKey("players.player_id"), index=True)
+    
+    amount = Column(Float, nullable=False)
+    remaining_amount = Column(Float, nullable=False)  # For partial redemptions
+    
+    source_type = Column(String(50), nullable=True)  # "WAGER", "REWARD", "ACTION"
+    source_id = Column(String(100), nullable=True)
+    
+    # Expiry
+    issued_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    is_expired = Column(Boolean, default=False, index=True)
+    
+    player = relationship("Player", back_populates="point_entries")
+
+
+class LoyaltyRedemption(Base):
+    """Audit trail for redemptions"""
+    __tablename__ = "loyalty_redemptions"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    player_id = Column(String(50), ForeignKey("players.player_id"), index=True)
+    rule_id = Column(Integer, ForeignKey("redemption_rules.id"))
+    
+    lp_amount = Column(Integer, nullable=False)
+    value_received = Column(Float, nullable=False)
+    currency_type = Column(Enum(CurrencyType), nullable=False)
+    
+    status = Column(Enum(RewardStatus), default=RewardStatus.COMPLETED)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    player = relationship("Player", back_populates="redemptions")

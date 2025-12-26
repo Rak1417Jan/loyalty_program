@@ -1,0 +1,86 @@
+[
+    {
+        "tier_level": "BRONZE",
+        "lp_min": 0,
+        "lp_max": 500,
+        "benefits": {
+            "cashback_multiplier": 1.0,
+            "bonus_multiplier": 1.0,
+            "free_spins_per_month": 10,
+            "withdrawal_priority": "standard",
+            "support_level": "email",
+            "birthday_bonus": 50,
+            "max_bonus_amount": 500
+        }
+    },
+    {
+        "tier_level": "SILVER",
+        "lp_min": 500,
+        "lp_max": 2000,
+        "benefits": {
+            "cashback_multiplier": 1.1,
+            "bonus_multiplier": 1.15,
+            "free_spins_per_month": 25,
+            "withdrawal_priority": "standard",
+            "support_level": "email",
+            "birthday_bonus": 100,
+            "max_bonus_amount": 1000,
+            "monthly_reload_bonus": 50
+        }
+    },
+    {
+        "tier_level": "GOLD",
+        "lp_min": 2000,
+        "lp_max": 5000,
+        "benefits": {
+            "cashback_multiplier": 1.25,
+            "bonus_multiplier": 1.3,
+            "free_spins_per_month": 50,
+            "withdrawal_priority": "priority",
+            "support_level": "live_chat",
+            "birthday_bonus": 250,
+            "max_bonus_amount": 2000,
+            "monthly_reload_bonus": 150,
+            "exclusive_tournaments": true
+        }
+    },
+    {
+        "tier_level": "PLATINUM",
+        "lp_min": 5000,
+        "lp_max": 10000,
+        "benefits": {
+            "cashback_multiplier": 1.5,
+            "bonus_multiplier": 1.5,
+            "free_spins_per_month": 100,
+            "withdrawal_priority": "express",
+            "support_level": "vip_manager",
+            "birthday_bonus": 500,
+            "max_bonus_amount": 5000,
+            "monthly_reload_bonus": 300,
+            "exclusive_tournaments": true,
+            "personal_account_manager": true,
+            "higher_withdrawal_limits": true
+        }
+    },
+    {
+        "tier_level": "DIAMOND",
+        "lp_min": 10000,
+        "lp_max": null,
+        "benefits": {
+            "cashback_multiplier": 2.0,
+            "bonus_multiplier": 2.0,
+            "free_spins_per_month": 200,
+            "withdrawal_priority": "instant",
+            "support_level": "dedicated_vip",
+            "birthday_bonus": 1000,
+            "max_bonus_amount": 10000,
+            "monthly_reload_bonus": 500,
+            "exclusive_tournaments": true,
+            "personal_account_manager": true,
+            "higher_withdrawal_limits": true,
+            "luxury_gifts": true,
+            "event_invitations": true,
+            "custom_bonuses": true
+        }
+    }
+]

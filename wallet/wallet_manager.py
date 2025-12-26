@@ -5,7 +5,8 @@ Manages multi-currency balances with restrictions and wagering requirements
 from sqlalchemy.orm import Session
 from models import (
     LoyaltyBalance, Transaction, TransactionType, CurrencyType,
-    RewardHistory, RewardStatus, Player
+    RewardHistory, RewardStatus, Player, LoyaltyPointEntry,
+    RedemptionRule, LoyaltyRedemption
 )
 from typing import Optional, Dict
 from datetime import datetime
@@ -70,7 +71,8 @@ class WalletManager:
         player_id: str,
         amount: float,
         source: str = "REWARD",
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        expiry_days: Optional[int] = None
     ) -> Transaction:
         """
         Add loyalty points to player balance
@@ -102,7 +104,32 @@ class WalletManager:
         )
         
         self.db.commit()
-        logger.info(f"Added {amount} LP to player {player_id}")
+        
+        # Add FIFO point entry
+        expires_at = None
+        if expiry_days:
+            from datetime import timedelta
+            expires_at = datetime.utcnow() + timedelta(days=expiry_days)
+            
+        point_entry = LoyaltyPointEntry(
+            player_id=player_id,
+            amount=amount,
+            remaining_amount=amount,
+            source_type=source,
+            expires_at=expires_at
+        )
+        self.db.add(point_entry)
+        self.db.commit()
+        
+        logger.info(f"Added {amount} LP to player {player_id} (Expires: {expires_at})")
+        
+        # Update player tier based on new LP balance
+        try:
+            from analytics.tier_service import TierService
+            tier_service = TierService(self.db)
+            tier_service.update_player_tier(player_id)
+        except Exception as e:
+            logger.error(f"Error updating tier for player {player_id}: {str(e)}")
         
         return transaction
     
@@ -242,7 +269,136 @@ class WalletManager:
         self.db.commit()
         logger.info(f"Deducted {amount} {currency_type.value} from player {player_id}")
         
+        # If LP, handle FIFO point entries
+        if currency_type == CurrencyType.LOYALTY_POINTS:
+            self._deduct_lp_fifo(player_id, amount)
+            
         return transaction
+
+    def _deduct_lp_fifo(self, player_id: str, amount: float):
+        """Deduct points from individual entries using FIFO"""
+        remaining_to_deduct = amount
+        # Get active entries ordered by oldest first
+        entries = self.db.query(LoyaltyPointEntry).filter(
+            LoyaltyPointEntry.player_id == player_id,
+            LoyaltyPointEntry.remaining_amount > 0,
+            LoyaltyPointEntry.is_expired == False
+        ).order_by(LoyaltyPointEntry.issued_at.asc()).all()
+        
+        for entry in entries:
+            if remaining_to_deduct <= 0:
+                break
+            
+            if entry.remaining_amount <= remaining_to_deduct:
+                remaining_to_deduct -= entry.remaining_amount
+                entry.remaining_amount = 0
+            else:
+                entry.remaining_amount -= remaining_to_deduct
+                remaining_to_deduct = 0
+                
+        self.db.commit()
+
+    def redeem_points(
+        self,
+        player_id: str,
+        rule_id: int
+    ) -> LoyaltyRedemption:
+        """
+        Redeem loyalty points for a reward based on a rule
+        """
+        player = self.db.query(Player).filter(Player.player_id == player_id).first()
+        rule = self.db.query(RedemptionRule).filter(RedemptionRule.id == rule_id).first()
+        
+        if not rule or not rule.is_active:
+            raise ValueError("Redemption rule not found or inactive")
+            
+        # Check tier requirement
+        if rule.tier_requirement and player.tier.value < rule.tier_requirement.value:
+            raise ValueError(f"Tier {rule.tier_requirement.value} required for this redemption")
+            
+        # Check LP balance
+        balance = self.get_or_create_balance(player_id)
+        if balance.lp_balance < rule.lp_cost or balance.lp_balance < rule.min_lp_balance:
+            raise ValueError(f"Insufficient LP balance for redemption. Cost: {rule.lp_cost}")
+            
+        # Deduct LP
+        self.deduct_balance(
+            player_id=player_id,
+            currency_type=CurrencyType.LOYALTY_POINTS,
+            amount=rule.lp_cost,
+            description=f"Redemption: {rule.name}"
+        )
+        
+        # Give value (Cash or Bonus)
+        if rule.target_balance == "CASH":
+            # In a real system, this would add to a real money wallet
+            # For this demo, we'll just log it as a transaction
+            self.create_transaction(
+                player_id=player_id,
+                transaction_type=TransactionType.REWARD,
+                currency_type=CurrencyType.CASH,
+                amount=rule.currency_value,
+                balance_before=0, # Simplified
+                balance_after=rule.currency_value,
+                description=f"Cash from LP redemption: {rule.name}"
+            )
+        elif rule.target_balance == "BONUS":
+            self.add_bonus_balance(
+                player_id=player_id,
+                amount=rule.currency_value,
+                description=f"Bonus from LP redemption: {rule.name}"
+            )
+            
+        # Create redemption record
+        redemption = LoyaltyRedemption(
+            player_id=player_id,
+            rule_id=rule.id,
+            lp_amount=rule.lp_cost,
+            value_received=rule.currency_value,
+            currency_type=rule.currency_type
+        )
+        self.db.add(redemption)
+        self.db.commit()
+        self.db.refresh(redemption)
+        
+        logger.info(f"Player {player_id} redeemed {rule.lp_cost} LP for {rule.currency_value} {rule.target_balance}")
+        return redemption
+
+    def process_point_expiry(self) -> int:
+        """Find and expire points that have passed their expiry date"""
+        now = datetime.utcnow()
+        expired_entries = self.db.query(LoyaltyPointEntry).filter(
+            LoyaltyPointEntry.is_expired == False,
+            LoyaltyPointEntry.expires_at <= now,
+            LoyaltyPointEntry.remaining_amount > 0
+        ).all()
+        
+        total_expired = 0
+        for entry in expired_entries:
+            amount = entry.remaining_amount
+            # Deduct from main balance
+            balance = self.get_or_create_balance(entry.player_id)
+            balance_before = balance.lp_balance
+            balance.lp_balance -= amount
+            
+            # Create transaction
+            self.create_transaction(
+                player_id=entry.player_id,
+                transaction_type=TransactionType.LP_EXPIRED,
+                currency_type=CurrencyType.LOYALTY_POINTS,
+                amount=-amount,
+                balance_before=balance_before,
+                balance_after=balance.lp_balance,
+                description=f"Points expired (Entry #{entry.id})"
+            )
+            
+            # Mark entry as expired
+            entry.is_expired = True
+            entry.remaining_amount = 0
+            total_expired += 1
+            
+        self.db.commit()
+        return total_expired
     
     def record_wager(
         self,
@@ -372,7 +528,8 @@ class WalletManager:
                 player_id=reward.player_id,
                 amount=reward.amount,
                 source="REWARD",
-                description=f"Reward from rule {reward.rule_id}"
+                description=f"Reward from rule {reward.rule_id}",
+                expiry_days=reward.meta_data.get("lp_expiry_days")
             )
         
         elif reward.currency_type == CurrencyType.BONUS_BALANCE:

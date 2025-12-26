@@ -1,0 +1,241 @@
+[
+  {
+    "rule_id": "LOSING_CASHBACK_10",
+    "name": "Losing Player 10% Cashback",
+    "description": "10% cashback on net loss for losing players",
+    "priority": 10,
+    "is_active": false,
+    "conditions": {"segment": "LOSING"},
+    "reward_config": {
+      "type": "BONUS_BALANCE",
+      "formula": "net_loss * 0.10",
+      "max_amount": 500,
+      "wagering_requirement": 10,
+      "expiry_hours": 72
+    }
+  },
+  {
+    "rule_id": "WINNING_LOYALTY_BOOST",
+    "name": "Winning Player Loyalty Boost",
+    "description": "Bonus LP for winning players based on wagering",
+    "priority": 8,
+    "is_active": false,
+    "conditions": {"segment": "WINNING"},
+    "reward_config": {
+      "type": "LOYALTY_POINTS",
+      "formula": "total_wagered * 0.05",
+      "max_amount": 1000
+    }
+  },
+  {
+    "rule_id": "NEW_PLAYER_WELCOME",
+    "name": "New Player Welcome Bonus",
+    "description": "Fixed welcome bonus for new players",
+    "priority": 15,
+    "is_active": false,
+    "conditions": {"segment": "NEW"},
+    "reward_config": {
+      "type": "BONUS_BALANCE",
+      "formula": "250",
+      "max_amount": 250,
+      "wagering_requirement": 20,
+      "expiry_hours": 168
+    }
+  },
+  {
+    "rule_id": "BREAKEVEN_LOYALTY",
+    "name": "Break-Even Player Loyalty",
+    "description": "Loyalty points for break-even players",
+    "priority": 5,
+    "is_active": false,
+    "conditions": {"segment": "BREAKEVEN"},
+    "reward_config": {
+      "type": "LOYALTY_POINTS",
+      "formula": "150",
+      "max_amount": 150
+    }
+  },
+  {
+    "rule_id": "VIP_EXCLUSIVE_BONUS",
+    "name": "VIP Exclusive Bonus",
+    "description": "High-value bonus for VIP segment",
+    "priority": 20,
+    "is_active": false,
+    "conditions": {"segment": "VIP"},
+    "reward_config": {
+      "type": "BONUS_BALANCE",
+      "formula": "total_deposited * 0.15",
+      "max_amount": 2000,
+      "wagering_requirement": 5,
+      "expiry_hours": 240
+    }
+  },
+  {
+    "rule_id": "HIGH_ROLLER_REWARD",
+    "name": "High Roller Reward",
+    "description": "Reward for players with high wagering",
+    "priority": 12,
+    "is_active": false,
+    "conditions": {
+      "total_wagered_min": 10000
+    },
+    "reward_config": {
+      "type": "LOYALTY_POINTS",
+      "formula": "total_wagered * 0.02",
+      "max_amount": 500
+    }
+  },
+  {
+    "rule_id": "LOSING_BIG_CASHBACK",
+    "name": "Big Loss Cashback",
+    "description": "Enhanced cashback for significant losses",
+    "priority": 18,
+    "is_active": false,
+    "conditions": {
+      "segment": "LOSING",
+      "net_loss_min": 1000
+    },
+    "reward_config": {
+      "type": "BONUS_BALANCE",
+      "formula": "net_loss * 0.20",
+      "max_amount": 1000,
+      "wagering_requirement": 8,
+      "expiry_hours": 96
+    }
+  },
+  {
+    "rule_id": "ACTIVE_PLAYER_TICKETS",
+    "name": "Active Player Free Tickets",
+    "description": "Tickets for players with many sessions",
+    "priority": 7,
+    "is_active": false,
+    "conditions": {
+      "session_count_min": 20
+    },
+    "reward_config": {
+      "type": "TICKETS",
+      "formula": "5",
+      "max_amount": 5
+    }
+  },
+  {
+    "rule_id": "SMALL_DEPOSIT_BOOST",
+    "name": "Small Deposit Boost",
+    "description": "Bonus for players with small deposits",
+    "priority": 6,
+    "is_active": false,
+    "conditions": {
+      "total_deposited_min": 100,
+      "total_deposited_max": 1000
+    },
+    "reward_config": {
+      "type": "BONUS_BALANCE",
+      "formula": "total_deposited * 0.25",
+      "max_amount": 250,
+      "wagering_requirement": 15,
+      "expiry_hours": 120
+    }
+  },
+  {
+    "rule_id": "WINNING_STREAK_BONUS",
+    "name": "Winning Streak Bonus",
+    "description": "Bonus for players with good win/loss ratio",
+    "priority": 9,
+    "is_active": false,
+    "conditions": {
+      "segment": "WINNING",
+      "win_loss_ratio_min": 1.5
+    },
+    "reward_config": {
+      "type": "LOYALTY_POINTS",
+      "formula": "200",
+      "max_amount": 200
+    }
+  },
+  {
+    "rule_id": "LOYALTY_MILESTONE_500",
+    "name": "500 LP Milestone Reward",
+    "description": "Bonus when player reaches 500 LP",
+    "priority": 4,
+    "is_active": false,
+    "conditions": {
+      "lp_balance_min": 500
+    },
+    "reward_config": {
+      "type": "BONUS_BALANCE",
+      "formula": "50",
+      "max_amount": 50,
+      "wagering_requirement": 5,
+      "expiry_hours": 48
+    }
+  },
+  {
+    "rule_id": "REACTIVATION_BONUS",
+    "name": "Player Reactivation Bonus",
+    "description": "Bonus for players returning after inactivity",
+    "priority": 11,
+    "is_active": false,
+    "conditions": {
+      "days_since_last_deposit_min": 7,
+      "days_since_last_deposit_max": 30
+    },
+    "reward_config": {
+      "type": "BONUS_BALANCE",
+      "formula": "100",
+      "max_amount": 100,
+      "wagering_requirement": 12,
+      "expiry_hours": 72
+    }
+  },
+  {
+    "rule_id": "MEGA_WAGERER",
+    "name": "Mega Wagerer Reward",
+    "description": "Huge reward for extreme wagering",
+    "priority": 25,
+    "is_active": false,
+    "conditions": {
+      "total_wagered_min": 50000
+    },
+    "reward_config": {
+      "type": "LOYALTY_POINTS",
+      "formula": "total_wagered * 0.03",
+      "max_amount": 3000
+    }
+  },
+  {
+    "rule_id": "EDGE_CASE_ZERO_LOSS",
+    "name": "Edge Case: Zero Loss Protection",
+    "description": "Test edge case with zero net loss",
+    "priority": 1,
+    "is_active": false,
+    "conditions": {
+      "net_loss_min": 0,
+      "net_loss_max": 10
+    },
+    "reward_config": {
+      "type": "LOYALTY_POINTS",
+      "formula": "25",
+      "max_amount": 25
+    }
+  },
+  {
+    "rule_id": "MULTI_CONDITION_TEST",
+    "name": "Multi-Condition Complex Rule",
+    "description": "Test multiple conditions together",
+    "priority": 14,
+    "is_active": false,
+    "conditions": {
+      "segment": "LOSING",
+      "total_wagered_min": 5000,
+      "session_count_min": 10,
+      "net_loss_min": 500
+    },
+    "reward_config": {
+      "type": "BONUS_BALANCE",
+      "formula": "net_loss * 0.15 + total_wagered * 0.01",
+      "max_amount": 800,
+      "wagering_requirement": 10,
+      "expiry_hours": 96
+    }
+  }
+]

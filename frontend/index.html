@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loyalty & Reward Program - Admin Panel</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon">✨</span>
+                    <span class="logo-text">Loyalty<span class="highlight">Pro</span></span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <ul>
+                    <li>
+                        <a href="#/" class="nav-item active" data-view="dashboard">
+                            <span class="icon">📊</span>
+                            Dashboard
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#/players" class="nav-item" data-view="players">
+                            <span class="icon">👥</span>
+                            Players
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#/rules" class="nav-item" data-view="rules">
+                            <span class="icon">📜</span>
+                            Reward Rules
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#/tiers" class="nav-item" data-view="tiers">
+                            <span class="icon">🏆</span>
+                            Tiers & Benefits
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#/wallet" class="nav-item" data-view="wallet">
+                            <span class="icon">💰</span>
+                            Wallet Simulator
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#/redemption" class="nav-item" data-view="redemption">
+                            <span class="icon">🎁</span>
+                            Redemption Rules
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#/analytics" class="nav-item" data-view="analytics">
+                            <span class="icon">📈</span>
+                            Analytics
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="avatar">A</div>
+                    <div class="details">
+                        <span class="name">Admin User</span>
+                        <span class="role">Super Admin</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="breadcrumb">
+                    <h1 id="page-title">Dashboard</h1>
+                    <span id="page-subtitle">Overview of program performance</span>
+                </div>
+
+                <div class="actions">
+                    <button id="refresh-btn" class="btn btn-icon" title="Refresh Data">
+                        🔄
+                    </button>
+                    <div class="status-indicator online">
+                        <span class="dot"></span>
+                        Backend Online
+                    </div>
+                </div>
+            </header>
+
+            <div id="app-view" class="view-container">
+                <!-- Dynamic Content Will Be Loaded Here -->
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading application...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="js/app.js"></script>
+</body>
+
+</html>

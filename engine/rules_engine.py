@@ -3,7 +3,7 @@ Reward Rules Engine
 Evaluates JSON-based reward rules and calculates rewards
 """
 from sqlalchemy.orm import Session
-from models import RewardRule, RewardHistory, RewardType, RewardStatus, CurrencyType
+from models import RewardRule, RewardHistory, RewardType, RewardStatus, CurrencyType, LoyaltyBalance
 from typing import Dict, List, Optional, Any
 import logging
 from datetime import datetime, timedelta
@@ -115,7 +115,12 @@ class RulesEngine:
             Calculated reward amount (before caps)
         """
         reward_config = rule.reward_config
-        formula = reward_config.get("formula", "0")
+        formula = reward_config.get("formula")
+        
+        # If no formula, check for fixed amount
+        if formula is None:
+            amount = reward_config.get("amount", 0)
+            return float(amount)
         
         # If formula is a number, return it
         try:
@@ -241,7 +246,8 @@ class RulesEngine:
                 "player_segment": player_state.get("segment"),
                 "player_tier": player_state.get("tier"),
                 "eligible_games": reward_config.get("eligible_games", []),
-                "max_bet": reward_config.get("max_bet")
+                "max_bet": reward_config.get("max_bet"),
+                "lp_expiry_days": reward_config.get("lp_expiry_days")
             }
         )
         
@@ -253,6 +259,16 @@ class RulesEngine:
             f"Created reward {reward.id} for player {player_id}: "
             f"{amount} {currency_type.value} from rule {rule.rule_id}"
         )
+        
+        # Automatically issue reward to player's wallet
+        try:
+            from wallet.wallet_manager import WalletManager
+            wallet = WalletManager(self.db)
+            wallet.issue_reward(reward.id)
+            logger.info(f"Auto-issued reward {reward.id} to player {player_id}'s wallet")
+        except Exception as e:
+            logger.error(f"Failed to auto-issue reward {reward.id}: {e}")
+            # Don't fail the reward creation, just log the error
         
         return reward
     
@@ -301,3 +317,153 @@ class RulesEngine:
             created_rewards.append(reward)
         
         return created_rewards
+    
+    def evaluate_rule_for_all_players(
+        self,
+        rule_id: str,
+        limit_per_player: int = 1
+    ) -> Dict[str, any]:
+        """
+        Evaluate a specific rule for all active players
+        
+        Args:
+            rule_id: Rule ID to evaluate
+            limit_per_player: Max rewards per player (default 1)
+        
+        Returns:
+            Dict with evaluation summary
+        """
+        from models import Player
+        from analytics.player_analytics import PlayerAnalytics
+        
+        # Get the rule
+        rule = self.db.query(RewardRule).filter(RewardRule.rule_id == rule_id).first()
+        if not rule:
+            raise ValueError(f"Rule {rule_id} not found")
+        
+        if not rule.is_active:
+            logger.warning(f"Rule {rule_id} is not active, skipping evaluation")
+            return {
+                "rule_id": rule_id,
+                "players_evaluated": 0,
+                "rewards_created": 0,
+                "errors": []
+            }
+        
+        # Get all active players
+        players = self.db.query(Player).filter(Player.is_active == True).all()
+        
+        analytics = PlayerAnalytics(self.db)
+        players_evaluated = 0
+        rewards_created = 0
+        errors = []
+        
+        logger.info(f"Evaluating rule {rule_id} for {len(players)} active players")
+        
+        for player in players:
+            try:
+                # Get player state
+                player_state = analytics.get_player_state(player.player_id)
+                
+                # Check if rule matches
+                if self.evaluate_rule(rule, player_state):
+                    # Calculate reward amount
+                    amount = self.calculate_reward_amount(rule, player_state)
+                    amount = self.apply_caps(amount, rule.reward_config)
+                    
+                    if amount > 0:
+                        # Create reward
+                        reward = self.create_reward(player.player_id, rule, amount, player_state)
+                        rewards_created += 1
+                        logger.info(f"Created reward for player {player.player_id}: {amount}")
+                
+                players_evaluated += 1
+                
+            except Exception as e:
+                error_msg = f"Error evaluating player {player.player_id}: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+        
+        summary = {
+            "rule_id": rule_id,
+            "players_evaluated": players_evaluated,
+            "rewards_created": rewards_created,
+            "errors": errors
+        }
+        
+        logger.info(f"Rule evaluation complete: {summary}")
+        return summary
+    
+    def revoke_rewards_for_rule(self, rule_id: str) -> Dict[str, any]:
+        """
+        Revoke all active rewards for a specific rule
+        
+        Args:
+            rule_id: Rule ID to revoke rewards for
+        
+        Returns:
+            Dict with revocation summary
+        """
+        from wallet.wallet_manager import WalletManager
+        
+        # Get all active/pending rewards for this rule
+        rewards = self.db.query(RewardHistory).filter(
+            RewardHistory.rule_id == rule_id,
+            RewardHistory.status.in_([RewardStatus.PENDING, RewardStatus.ACTIVE])
+        ).all()
+        
+        wallet = WalletManager(self.db)
+        rewards_revoked = 0
+        errors = []
+        
+        logger.info(f"Revoking {len(rewards)} rewards for rule {rule_id}")
+        
+        for reward in rewards:
+            try:
+                # If reward was issued (ACTIVE), we need to deduct from wallet
+                if reward.status == RewardStatus.ACTIVE:
+                    # Deduct the reward amount from player's balance
+                    if reward.currency_type == CurrencyType.LOYALTY_POINTS:
+                        # Deduct LP
+                        balance = self.db.query(LoyaltyBalance).filter(
+                            LoyaltyBalance.player_id == reward.player_id
+                        ).first()
+                        
+                        if balance and balance.lp_balance >= reward.amount:
+                            balance.lp_balance -= reward.amount
+                            logger.info(f"Deducted {reward.amount} LP from player {reward.player_id}")
+                        else:
+                            logger.warning(f"Insufficient LP balance for player {reward.player_id}, skipping deduction")
+                    
+                    elif reward.currency_type == CurrencyType.BONUS_BALANCE:
+                        # Deduct bonus balance
+                        balance = self.db.query(LoyaltyBalance).filter(
+                            LoyaltyBalance.player_id == reward.player_id
+                        ).first()
+                        
+                        if balance and balance.bonus_balance >= reward.amount:
+                            balance.bonus_balance -= reward.amount
+                            logger.info(f"Deducted {reward.amount} BONUS from player {reward.player_id}")
+                        else:
+                            logger.warning(f"Insufficient bonus balance for player {reward.player_id}, skipping deduction")
+                
+                # Mark reward as revoked
+                reward.status = RewardStatus.EXPIRED  # Using EXPIRED status to indicate revoked
+                reward.completed_at = datetime.utcnow()
+                rewards_revoked += 1
+                
+            except Exception as e:
+                error_msg = f"Error revoking reward {reward.id}: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+        
+        self.db.commit()
+        
+        summary = {
+            "rule_id": rule_id,
+            "rewards_revoked": rewards_revoked,
+            "errors": errors
+        }
+        
+        logger.info(f"Reward revocation complete: {summary}")
+        return summary

@@ -1,0 +1,11 @@
+{
+    "name": "loyalty-program-frontend",
+    "version": "1.0.0",
+    "description": "Frontend for the Loyalty Reward Program",
+    "main": "index.html",
+    "scripts": {
+        "dev": "npx -y http-server . -p 8080 -o",
+        "start": "npx -y http-server . -p 8080"
+    },
+    "dependencies": {}
+}

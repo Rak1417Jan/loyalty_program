@@ -3,7 +3,7 @@ Excel/CSV Data Importer
 Import player data from Excel/CSV files and trigger reward evaluation
 """
 from sqlalchemy.orm import Session
-from models import Player, PlayerMetrics, LoyaltyBalance, Transaction, TransactionType
+from models import Player, PlayerMetrics, LoyaltyBalance, Transaction, TransactionType, CurrencyType
 from analytics.player_analytics import PlayerAnalytics
 from analytics.segmentation import PlayerSegmentation
 from engine.rules_engine import RulesEngine
@@ -158,12 +158,19 @@ class ExcelImporter:
             player = Player(
                 player_id=player_id,
                 email=row.get("email"),
-                name=row.get("name")
+                name=row.get("name", f"Player {player_id}")
             )
             self.db.add(player)
             self.db.flush()
             created = True
             logger.info(f"Created new player: {player_id}")
+            
+        # Ensure balance record exists
+        balance = self.db.query(LoyaltyBalance).filter(LoyaltyBalance.player_id == player_id).first()
+        if not balance:
+            balance = LoyaltyBalance(player_id=player_id)
+            self.db.add(balance)
+            self.db.flush()
         
         # Create or update transactions from totals
         # This is a simplified approach - in production, you'd import individual transactions
@@ -205,9 +212,10 @@ class ExcelImporter:
         
         This is a simplified approach. In production, you'd import individual transactions.
         """
-        total_deposited = float(row.get("total_deposited", 0))
-        total_wagered = float(row.get("total_wagered", 0))
-        total_won = float(row.get("total_won", 0))
+        # Mapping CSV column names: deposit -> total_deposited, etc.
+        total_deposited = float(row.get("deposit", row.get("total_deposited", 0)))
+        total_wagered = float(row.get("wagered", row.get("total_wagered", 0)))
+        total_won = float(row.get("won", row.get("total_won", 0)))
         
         # Check if transactions already exist
         existing = self.db.query(Transaction).filter(
@@ -223,7 +231,7 @@ class ExcelImporter:
             deposit_tx = Transaction(
                 player_id=player_id,
                 transaction_type=TransactionType.DEPOSIT,
-                currency_type=None,  # Real money, not loyalty currency
+                currency_type=CurrencyType.CASH,  # Real money
                 amount=total_deposited,
                 balance_before=0,
                 balance_after=total_deposited,
@@ -235,7 +243,7 @@ class ExcelImporter:
             wager_tx = Transaction(
                 player_id=player_id,
                 transaction_type=TransactionType.WAGER,
-                currency_type=None,
+                currency_type=CurrencyType.CASH,
                 amount=total_wagered,
                 balance_before=0,
                 balance_after=0,
@@ -247,7 +255,7 @@ class ExcelImporter:
             win_tx = Transaction(
                 player_id=player_id,
                 transaction_type=TransactionType.WIN,
-                currency_type=None,
+                currency_type=CurrencyType.CASH,
                 amount=total_won,
                 balance_before=0,
                 balance_after=total_won,

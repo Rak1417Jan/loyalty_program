@@ -1,11 +1,11 @@
 player_id,total_deposited,total_wagered,total_won,sessions,playtime_hours,email,name
-P001,5000,15000,12000,25,48,player1@example.com,John Doe
-P002,1000,3000,3500,10,20,player2@example.com,Jane Smith
-P003,10000,30000,25000,50,100,player3@example.com,Alice Johnson
-P004,500,1500,1400,5,10,player4@example.com,Bob Williams
-P005,20000,80000,60000,120,250,player5@example.com,Charlie Brown
-P006,2000,6000,5800,15,30,player6@example.com,Diana Prince
-P007,8000,25000,18000,40,80,player7@example.com,Eve Davis
-P008,300,800,900,3,5,player8@example.com,Frank Miller
-P009,15000,50000,55000,80,180,player9@example.com,Grace Lee
-P010,1500,4500,4200,12,25,player10@example.com,Henry Wilson
+P001,5000,15000,20000,25,48,player1@example.com,John Winner
+P002,1000,5000,200,10,20,player2@example.com,Jane Loser
+P003,10000,50000,45000,50,100,player3@example.com,Alice HighRoller
+P004,500,500,500,5,10,player4@example.com,Bob Breakeven
+P005,20000,80000,90000,120,250,player5@example.com,Charlie Whale
+P006,2000,6000,0,15,30,player6@example.com,Diana Unlucky
+P007,8000,25000,28000,40,80,player7@example.com,Eve Grinder
+P008,300,800,100,3,5,player8@example.com,Frank Casual
+P009,15000,50000,2000,80,180,player9@example.com,Grace Tilter
+P010,1500,4500,4500,12,25,player10@example.com,Henry Even

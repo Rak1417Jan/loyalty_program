@@ -4,8 +4,8 @@ Calculates financial, behavioral, and risk metrics for players
 """
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from models import Player, PlayerMetrics, Transaction, TransactionType
-from typing import Dict, Optional
+from models import Player, PlayerMetrics, Transaction, TransactionType, Tier, PlayerAction
+from typing import List, Dict, Optional, Any
 import logging
 from datetime import datetime, timedelta
 
@@ -115,28 +115,33 @@ class PlayerAnalytics:
             "games_played": games_played
         }
     
-    def calculate_risk_metrics(self, player_id: str) -> Dict[str, float]:
+    def calculate_risk_metrics(self, player_id: str, financial_metrics: Dict = None) -> Dict[str, float]:
         """
         Calculate risk metrics
         
         Returns:
             Dict with: win_loss_ratio, volatility_score, bonus_abuse_score
         """
-        metrics = self.db.query(PlayerMetrics).filter(
-            PlayerMetrics.player_id == player_id
-        ).first()
-        
-        if not metrics:
-            return {
-                "win_loss_ratio": 0.0,
-                "volatility_score": 0.0,
-                "bonus_abuse_score": 0
-            }
-        
+        # Use provided financial metrics or fetch current from DB
+        if financial_metrics:
+            total_wagered = financial_metrics.get("total_wagered", 0.0)
+            total_won = financial_metrics.get("total_won", 0.0)
+        else:
+            metrics = self.db.query(PlayerMetrics).filter(
+                PlayerMetrics.player_id == player_id
+            ).first()
+            if not metrics:
+                return {
+                    "win_loss_ratio": 0.0,
+                    "volatility_score": 0.0,
+                    "bonus_abuse_score": 0
+                }
+            total_wagered = metrics.total_wagered
+            total_won = metrics.total_won
+            
         # Win/Loss ratio
-        total_lost = metrics.total_wagered - metrics.total_won
         win_loss_ratio = (
-            metrics.total_won / total_lost if total_lost > 0 else 0.0
+            total_won / total_wagered if total_wagered > 0 else 0.0
         )
         
         # Volatility score (simplified - standard deviation of bet sizes)
@@ -156,6 +161,43 @@ class PlayerAnalytics:
             "win_loss_ratio": win_loss_ratio,
             "volatility_score": volatility_score,
             "bonus_abuse_score": bonus_abuse_score
+        }
+    
+    def calculate_action_metrics(self, player_id: str) -> Dict[str, Any]:
+        """
+        Calculate action-based metrics (KYC, Profile, etc.)
+        """
+        # KYC status
+        kyc_action = self.db.query(PlayerAction).filter(
+            PlayerAction.player_id == player_id,
+            PlayerAction.action_type == "KYC_COMPLETE"
+        ).first()
+        
+        # Profile depth (0-100)
+        profile_action = self.db.query(PlayerAction).filter(
+            PlayerAction.player_id == player_id,
+            PlayerAction.action_type == "PROFILE_DEEPENING"
+        ).order_by(PlayerAction.created_at.desc()).first()
+        
+        profile_depth = 0
+        if profile_action and profile_action.value:
+            try:
+                profile_depth = int(profile_action.value)
+            except ValueError:
+                profile_depth = 0
+
+        # Monthly active days (days with at least one wager in the last 30 days)
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        active_days = self.db.query(func.count(func.distinct(func.date(Transaction.created_at)))).filter(
+            Transaction.player_id == player_id,
+            Transaction.transaction_type == TransactionType.WAGER,
+            Transaction.created_at >= thirty_days_ago
+        ).scalar() or 0
+        
+        return {
+            "kyc_completed": kyc_action is not None,
+            "profile_depth": profile_depth,
+            "monthly_active_days": active_days
         }
     
     def calculate_risk_score(self, player_id: str) -> int:
@@ -201,7 +243,7 @@ class PlayerAnalytics:
         # Calculate all metrics
         financial = self.calculate_financial_metrics(player_id)
         behavioral = self.calculate_behavioral_metrics(player_id, session_data)
-        risk = self.calculate_risk_metrics(player_id)
+        risk = self.calculate_risk_metrics(player_id, financial)
         
         # Get or create metrics record
         metrics = self.db.query(PlayerMetrics).filter(
@@ -272,7 +314,7 @@ class PlayerAnalytics:
                 datetime.utcnow() - metrics.last_deposit_at
             ).days
         
-        return {
+        state = {
             "player_id": player_id,
             "segment": player.segment.value,
             "tier": player.tier.value,
@@ -305,3 +347,14 @@ class PlayerAnalytics:
             "bonus_balance": balances.bonus_balance if balances else 0,
             "tickets_balance": balances.tickets_balance if balances else 0,
         }
+        
+        # Add action metrics
+        action_metrics = self.calculate_action_metrics(player_id)
+        state.update(action_metrics)
+        
+        # Add tier benefits to state for rule evaluation
+        tier_config = self.db.query(Tier).filter(Tier.tier_level == player.tier).first()
+        if tier_config and tier_config.benefits:
+            state.update(tier_config.benefits)
+            
+        return state
